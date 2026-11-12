@@ -1,0 +1,62 @@
+name: Build Unsigned IPA
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Create project.yml and Generate Xcode Project
+        run: |
+          cat << 'EOF' > project.yml
+          name: TIGERQRCODE
+          options:
+            bundleIdPrefix: com.tigerqrcode
+          targets:
+            TIGERQRCODE:
+              type: application
+              platform: iOS
+              deploymentTarget: "16.0"
+              sources:
+                - path: .
+                  includes:
+                    - "**/*.swift"
+              settings:
+                base:
+                  INFOPLIST_KEY_NSCameraUsageDescription: "Camera access is required to scan QR codes."
+                  INFOPLIST_KEY_NSPhotoLibraryAddUsageDescription: "Photo library access is required to save ID cards."
+                  GENERATE_INFOPLIST_FILE: YES
+          EOF
+          xcodegen generate
+
+      - name: Build App
+        run: |
+          xcodebuild -project TIGERQRCODE.xcodeproj \
+            -scheme TIGERQRCODE \
+            -configuration Release \
+            -sdk iphoneos \
+            -derivedDataPath build \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGN_IDENTITY="" \
+            CODE_SIGNING_REQUIRED=NO
+
+      - name: Package IPA
+        run: |
+          mkdir -p Payload
+          cp -r build/Build/Products/Release-iphoneos/TIGERQRCODE.app Payload/
+          zip -r TIGERQRCODE.ipa Payload
+
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: TIGERQRCODE-IPA
+          path: TIGERQRCODE.ipa
